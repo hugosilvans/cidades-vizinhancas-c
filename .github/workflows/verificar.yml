@@ -1,0 +1,17 @@
+name: Verificações do código
+on:
+  push:
+    branches: [main]
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  verificar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Executar verificações
+        run: |
+          gcc -std=c11 -Wall -Wextra -I. cidades.c tests/test_cidades.c -lm -o /tmp/teste
+          /tmp/teste

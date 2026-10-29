@@ -1,254 +1,171 @@
+#include "cidades.h"
+#include <ctype.h>
+#include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include "cidades.h"
 
-/*
-RESTRIÇÕES 
-    • 3 ≤ T ≤ 10^6 e 2 ≤ N ≤ 10^4
-    • 0 < Xi < T, para 1 ≤ i ≤ N
-    • Xi ≠ Xj, para todo par 1 ≤ i, j ≤ N.
-*/
-
-/*
-OBSERVAÇÕES 
-    - Caso ocorra erro na inicialização da estrada, getEstrada() deve retornar ponteiro NULL.
-    - É importante construir casos de teste adicionais para validar sua solução.
-*/
-
-// Função auxiliar para criar uma cidade
-Cidade *criarCidade(int posicao, const char *nome) {
-    Cidade *nova = (Cidade *) malloc(sizeof(Cidade));
-    if (!nova) return NULL;
-
-    strcpy(nova->Nome, nome);
-    nova->Posicao = posicao;
-    nova->Proximo = NULL;
-    return nova;
-}
-
-// Estrutura temporária usada na leitura e ordenação
 typedef struct {
-    int Posicao;
-    char Nome[256];
-} TempCidade;
+    int posicao;
+    char nome[256];
+} CidadeLida;
 
-// Função de comparação para qsort
-int compararCidades(const void *a, const void *b) {
-    const TempCidade *c1 = (const TempCidade *)a;
-    const TempCidade *c2 = (const TempCidade *)b;
-    return c1->Posicao - c2->Posicao;
+static void liberarEstrada(Estrada *estrada) {
+    if (!estrada)
+        return;
+    Cidade *cidade = estrada->Inicio;
+    while (cidade) {
+        Cidade *proxima = cidade->Proximo;
+        free(cidade);
+        cidade = proxima;
+    }
+    free(estrada);
 }
 
+static int comparar(const void *a, const void *b) {
+    int x = ((const CidadeLida *)a)->posicao;
+    int y = ((const CidadeLida *)b)->posicao;
+    return (x > y) - (x < y);
+}
 
-// 1. getEstrada()
+/* strtol permite detectar números fora do intervalo, ao contrário de atoi. */
+static int lerInteiro(char **texto, int *valor) {
+    char *fim;
+    long numero = strtol(*texto, &fim, 10);
+    if (fim == *texto || numero < INT_MIN || numero > INT_MAX)
+        return 0;
+    *texto = fim;
+    *valor = (int)numero;
+    return 1;
+}
 
 Estrada *getEstrada(const char *nomeArquivo) {
-    FILE *fp = fopen(nomeArquivo, "r");
-    if (!fp) {
-        printf("ERRO: não foi possível abrir o arquivo '%s'.\n", nomeArquivo);
+    if (!nomeArquivo)
         return NULL;
-    }
-
-    int T, N;
-    if (fscanf(fp, "%d", &T) != 1 || fscanf(fp, "%d", &N) != 1) {
-        printf("ERRO: formato incorreto na leitura de T ou N.\n");
-        fclose(fp);
+    FILE *arquivo = fopen(nomeArquivo, "r");
+    if (!arquivo)
         return NULL;
+
+    char linha[1024], *texto;
+    int tamanho, quantidade;
+    CidadeLida *dados = NULL;
+    Estrada *estrada = NULL;
+
+    if (!fgets(linha, sizeof linha, arquivo))
+        goto falha;
+    texto = linha;
+    if (!lerInteiro(&texto, &tamanho) || tamanho < 3 || tamanho > 1000000)
+        goto falha;
+    while (isspace((unsigned char)*texto))
+        texto++;
+    if (*texto)
+        goto falha;
+    if (!fgets(linha, sizeof linha, arquivo))
+        goto falha;
+    texto = linha;
+    if (!lerInteiro(&texto, &quantidade) || quantidade < 2 || quantidade > 10000)
+        goto falha;
+    while (isspace((unsigned char)*texto))
+        texto++;
+    if (*texto)
+        goto falha;
+
+    dados = calloc((size_t)quantidade, sizeof *dados);
+    if (!dados)
+        goto falha;
+    for (int i = 0; i < quantidade; i++) {
+        if (!fgets(linha, sizeof linha, arquivo))
+            goto falha;
+        /* Uma linha truncada não pode virar um nome parcial silenciosamente. */
+        if (!strchr(linha, '\n') && !feof(arquivo))
+            goto falha;
+        texto = linha;
+        if (!lerInteiro(&texto, &dados[i].posicao))
+            goto falha;
+        if (!isspace((unsigned char)*texto))
+            goto falha;
+        while (isspace((unsigned char)*texto))
+            texto++;
+        size_t comprimento = strlen(texto);
+        while (comprimento && isspace((unsigned char)texto[comprimento - 1]))
+            comprimento--;
+        if (!comprimento || comprimento >= sizeof dados[i].nome)
+            goto falha;
+        memcpy(dados[i].nome, texto, comprimento);
+        dados[i].nome[comprimento] = '\0';
+        if (dados[i].posicao <= 0 || dados[i].posicao >= tamanho)
+            goto falha;
     }
-
-    // Verifica restrições
-    if (T < 3 || T > 1000000 || N < 2 || N > 10000) {
-        printf("ERRO: restrições de T ou N violadas.\n");
-        fclose(fp);
-        return NULL;
+    /* Ordenar uma vez permite validar duplicatas comparando apenas vizinhos. */
+    qsort(dados, (size_t)quantidade, sizeof *dados, comparar);
+    for (int i = 1; i < quantidade; i++) {
+        if (dados[i - 1].posicao == dados[i].posicao)
+            goto falha;
     }
-
-    TempCidade *temp = malloc(sizeof(TempCidade) * N);
-    if (!temp) {
-        fclose(fp);
-        return NULL;
+    estrada = calloc(1, sizeof *estrada);
+    if (!estrada)
+        goto falha;
+    estrada->N = quantidade;
+    estrada->T = tamanho;
+    Cidade **destino = &estrada->Inicio;
+    for (int i = 0; i < quantidade; i++) {
+        Cidade *cidade = calloc(1, sizeof *cidade);
+        if (!cidade)
+            goto falha;
+        cidade->Posicao = dados[i].posicao;
+        memcpy(cidade->Nome, dados[i].nome, sizeof cidade->Nome);
+        *destino = cidade;
+        destino = &cidade->Proximo;
     }
+    free(dados);
+    fclose(arquivo);
+    return estrada;
 
-    // Lê as cidades
-    for (int i = 0; i < N; i++) {
-        if (fscanf(fp, "%d %[^\n]", &temp[i].Posicao, temp[i].Nome) != 2) {
-            printf("ERRO: leitura inválida na linha %d.\n", i + 3);
-            free(temp);
-            fclose(fp);
-            return NULL;
-        }
-
-        // Verifica posição
-        if (temp[i].Posicao <= 0 || temp[i].Posicao >= T) {
-            printf("ERRO: posição inválida (%d) para cidade %s.\n", temp[i].Posicao, temp[i].Nome);
-            free(temp);
-            fclose(fp);
-            return NULL;
-        }
-
-        // Verifica duplicada
-        for (int j = 0; j < i; j++) {
-            if (temp[i].Posicao == temp[j].Posicao) {
-                printf("ERRO: posições duplicadas (%d) detectadas.\n", temp[i].Posicao);
-                free(temp);
-                fclose(fp);
-                return NULL;
-            }
-        }
-    }
-
-    fclose(fp);
-
-    // Ordena cidades pela posição
-    qsort(temp, N, sizeof(TempCidade), compararCidades);
-
-    Estrada *E = malloc(sizeof(Estrada));
-    if (!E) {
-        free(temp);
-        return NULL;
-    }
-
-    E->T = T;
-    E->N = N;
-    E->Inicio = NULL;
-
-    Cidade *anterior = NULL;
-    for (int i = 0; i < N; i++) {
-        Cidade *nova = criarCidade(temp[i].Posicao, temp[i].Nome);
-        if (!nova) {
-            free(temp);
-            free(E);
-            return NULL;
-        }
-        if (E->Inicio == NULL)
-            E->Inicio = nova;
-        else
-            anterior->Proximo = nova;
-
-        anterior = nova;
-    }
-
-    free(temp);
-    return E;
+falha:
+    free(dados);
+    liberarEstrada(estrada);
+    fclose(arquivo);
+    return NULL;
 }
 
-
-// 2. calcularMenorVizinhanca()
+/* Uma única regra atende ao cálculo numérico e à identificação da cidade. */
+static Cidade *menorVizinhanca(Estrada *estrada, double *menor) {
+    Cidade *anterior = NULL, *escolhida = NULL;
+    *menor = (double)estrada->T + 1;
+    for (Cidade *atual = estrada->Inicio; atual; atual = atual->Proximo) {
+        double esquerda = anterior ? (anterior->Posicao + atual->Posicao) / 2.0 : 0;
+        double direita =
+            atual->Proximo ? (atual->Posicao + atual->Proximo->Posicao) / 2.0 : estrada->T;
+        double comprimento = direita - esquerda;
+        if (comprimento < *menor) {
+            *menor = comprimento;
+            escolhida = atual;
+        }
+        anterior = atual;
+    }
+    return escolhida;
+}
 
 double calcularMenorVizinhanca(const char *nomeArquivo) {
-    FILE *fp = fopen(nomeArquivo, "r");
-    if (!fp) return -1.0;
-
-    int T, N;
-    if (fscanf(fp, "%d", &T) != 1 || fscanf(fp, "%d", &N) != 1) {
-        fclose(fp);
+    Estrada *estrada = getEstrada(nomeArquivo);
+    if (!estrada)
         return -1.0;
-    }
-
-    TempCidade *temp = malloc(sizeof(TempCidade) * N);
-    if (!temp) {
-        fclose(fp);
-        return -1.0;
-    }
-
-    for (int i = 0; i < N; i++)
-        fscanf(fp, "%d %255s", &temp[i].Posicao, temp[i].Nome);
-    fclose(fp);
-
-    qsort(temp, N, sizeof(TempCidade), compararCidades);
-
-    double menor = 1e9;
-    for (int i = 0; i < N; i++) {
-        double viz;
-        if (i == 0)
-            viz = (temp[i + 1].Posicao + temp[i].Posicao) / 2.0;
-        else if (i == N - 1)
-            viz = (double)T - (temp[i].Posicao + temp[i - 1].Posicao) / 2.0;
-        else
-            viz = (temp[i + 1].Posicao - temp[i - 1].Posicao) / 2.0;
-
-        if (viz < menor)
-            menor = viz;
-    }
-
-    free(temp);
+    double menor;
+    menorVizinhanca(estrada, &menor);
+    liberarEstrada(estrada);
     return menor;
 }
 
-// 3. cidadeMenorVizinhanca
-
 char *cidadeMenorVizinhanca(const char *nomeArquivo) {
-    FILE *fp = fopen(nomeArquivo, "r");
-    if (!fp) return NULL;
-
-    int T, N;
-    if (fscanf(fp, "%d", &T) != 1 || fscanf(fp, "%d", &N) != 1) {
-        fclose(fp);
+    Estrada *estrada = getEstrada(nomeArquivo);
+    if (!estrada)
         return NULL;
-    }
-
-    TempCidade *temp = malloc(sizeof(TempCidade) * N);
-    if (!temp) {
-        fclose(fp);
-        return NULL;
-    }
-
-    for (int i = 0; i < N; i++) {
-        if (fscanf(fp, "%d %[^\n]", &temp[i].Posicao, temp[i].Nome) != 2) {
-            free(temp);
-            fclose(fp);
-            return NULL;
-        }
-    }
-    fclose(fp);
-
-    // Ordena as cidades pela posição
-    qsort(temp, N, sizeof(TempCidade), compararCidades);
-
-    double menorVizinhanca = 1e9 + 7; // Inicializa com um valor grande
-    char *nomeMenorVizinhanca = NULL;
-
-    for (int i = 0; i < N; i++) {
-        double viz;
-        
-        // Cidades nas extremidades
-        if (i == 0) {
-            // Primeira cidade: vizinhança é metade da distância para a próxima
-            // mais a distância até o início da estrada 0
-
-            viz = (temp[i + 1].Posicao + temp[i].Posicao) / 2.0;
-        } else if (i == N - 1) {
-            // Última cidade: vizinhança é metade da distância para a anterior
-            // mais a distância do ponto médio até o fim da estrada T
-
-            double pontoMedioAnterior = (temp[i].Posicao + temp[i - 1].Posicao) / 2.0;
-            viz = (double)T - pontoMedioAnterior;
-        } else {
-        
-            viz = (temp[i + 1].Posicao - temp[i - 1].Posicao) / 2.0;
-        }
-        // Se a vizinhança atual for menor que a menor registrada,
-        // ou for igual, atualiza a menor vizinhança e o nome da cidade
-
-        if (viz < menorVizinhanca) {
-            menorVizinhanca = viz;
-        
-            if (nomeMenorVizinhanca != NULL) {
-                free(nomeMenorVizinhanca);
-            }   
-
-            nomeMenorVizinhanca = (char *) malloc(sizeof(char) * (strlen(temp[i].Nome) + 1));
-            
-            if (!nomeMenorVizinhanca) {
-                free(temp);
-                return NULL;
-            }
-            
-            strcpy(nomeMenorVizinhanca, temp[i].Nome);
-        }
-    }
-
-    free(temp); 
-    return nomeMenorVizinhanca;
+    double menor;
+    Cidade *cidade = menorVizinhanca(estrada, &menor);
+    /* O chamador recebe sua própria cópia e deve liberá-la com free. */
+    char *nome = malloc(strlen(cidade->Nome) + 1);
+    if (nome)
+        strcpy(nome, cidade->Nome);
+    liberarEstrada(estrada);
+    return nome;
 }

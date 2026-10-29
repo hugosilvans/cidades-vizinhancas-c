@@ -52,3 +52,18 @@ O exemplo corresponde a [teste01.txt](teste01.txt). As restrições verificadas 
 ## Licença
 
 Consulte [LICENSE](LICENSE).
+
+## Leitura e testes atualizados
+
+A leitura é compartilhada pelas funções públicas: aceita nomes com espaços, rejeita campos longos, valida as posições e trata falhas de alocação. O console específico do Windows fica condicionado a `_WIN32`; o programa também compila no Linux.
+
+```bash
+gcc -std=c11 -Wall -Wextra -I. cidades.c tests/test_cidades.c -lm -o teste
+./teste
+gcc -std=c11 main.c cidades.c -o cidades
+./cidades teste01.txt
+```
+
+## Guia do código
+
+Consulte [GUIA_CODIGO.md](GUIA_CODIGO.md) para localizar os módulos, entender as convenções e estudar as alterações.

@@ -53,3 +53,14 @@ dkms.conf
 
 # debug information files
 *.dwo
+
+node_modules/
+__pycache__/
+*.py[cod]
+*.class
+**/target/
+.env
+.env.*
+!.env.example
+dist/
+.angular/

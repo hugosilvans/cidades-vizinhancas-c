@@ -1,12 +1,17 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#ifdef _WIN32
 #include <windows.h>
+#endif
 #include "cidades.h"
 
 int main(int argc, char const *argv[]) {
+    /* O console UTF-8 é específico do Windows; o algoritmo é portátil. */
+#ifdef _WIN32
     SetConsoleOutputCP(CP_UTF8);
     SetConsoleCP(CP_UTF8);
+#endif
 
     const char *arquivo = (argc > 1) ? argv[1] : "teste03.txt";
 
@@ -35,7 +40,7 @@ int main(int argc, char const *argv[]) {
 
     printf("\n----------------------------\n");
     printf("Menor vizinhança: %.2f km\n", menorViz);
-    printf("Cidade com menor vizinhança: %s\n", cidadeMenor);
+    printf("Cidade com menor vizinhança: %s\n", cidadeMenor ? cidadeMenor : "indisponível");
     printf("----------------------------\n\n");
 
     free(cidadeMenor);
