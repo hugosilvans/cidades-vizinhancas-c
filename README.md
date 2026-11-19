@@ -63,7 +63,3 @@ gcc -std=c11 -Wall -Wextra -I. cidades.c tests/test_cidades.c -lm -o teste
 gcc -std=c11 main.c cidades.c -o cidades
 ./cidades teste01.txt
 ```
-
-## Guia do código
-
-Consulte [GUIA_CODIGO.md](GUIA_CODIGO.md) para localizar os módulos, entender as convenções e estudar as alterações.
